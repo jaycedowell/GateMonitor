@@ -151,16 +151,16 @@ void record_measurements() {
     float vbat_min, vbat_max;
     float vsol_min, vsol_max;
     float tbat_min, tbat_max;
-    vbat_min = vbat_max = Last10Min[0].vbat;
-    vsol_min = vsol_max = Last10Min[0].vsol;
-    tbat_min = tbat_max = Last10Min[0].tbat;
-    for(int i=1; i<20; i++) {
-      vbat_min = fminf(vbat_min, Last10Min[i].vbat);
-      vbat_max = fmaxf(vbat_max, Last10Min[i].vbat);
-      vsol_min = fminf(vsol_min, Last10Min[i].vsol);
-      vsol_max = fmaxf(vsol_max, Last10Min[i].vsol);
-      tbat_min = fminf(tbat_min, Last10Min[i].tbat);
-      tbat_max = fmaxf(tbat_max, Last10Min[i].tbat);
+    vbat_min = vbat_max = NAN;
+    vsol_min = vsol_max = NAN;
+    tbat_min = tbat_max = NAN;
+    for(const Measurement &entry : Last10Min) {
+      vbat_min = fminf(vbat_min, entry.vbat);
+      vbat_max = fmaxf(vbat_max, entry.vbat);
+      vsol_min = fminf(vsol_min, entry.vsol);
+      vsol_max = fmaxf(vsol_max, entry.vsol);
+      tbat_min = fminf(tbat_min, entry.tbat);
+      tbat_max = fmaxf(tbat_max, entry.tbat);
     }
     
     Range aggregate;
@@ -173,19 +173,16 @@ void record_measurements() {
     aggregate.time = Last10Min[0].time;
     
     if( LastHour.push(aggregate) ) {
-      vbat_min = LastHour[0].vbat_min;
-      vbat_max = LastHour[0].vbat_max;
-      vsol_min = LastHour[0].vsol_min;
-      vsol_max = LastHour[0].vsol_max;
-      tbat_min = LastHour[0].tbat_min;
-      tbat_max = LastHour[0].tbat_max;
-      for(int i=1; i<6; i++) {
-        vbat_min = fminf(vbat_min, LastHour[i].vbat_min);
-        vbat_max = fmaxf(vbat_max, LastHour[i].vbat_max);
-        vsol_min = fminf(vsol_min, LastHour[i].vsol_min);
-        vsol_max = fmaxf(vsol_max, LastHour[i].vsol_max);
-        tbat_min = fminf(tbat_min, LastHour[i].tbat_min);
-        tbat_max = fmaxf(tbat_max, LastHour[i].tbat_max);
+      vbat_min = vbat_max = NAN;
+      vsol_min = vsol_max = NAN;
+      tbat_min = tbat_max = NAN;
+      for(const Range &entry : LastHour) {
+        vbat_min = fminf(vbat_min, entry.vbat_min);
+        vbat_max = fmaxf(vbat_max, entry.vbat_max);
+        vsol_min = fminf(vsol_min, entry.vsol_min);
+        vsol_max = fmaxf(vsol_max, entry.vsol_max);
+        tbat_min = fminf(tbat_min, entry.tbat_min);
+        tbat_max = fmaxf(tbat_max, entry.tbat_max);
       }
       
       aggregate.vbat_min = vbat_min;
