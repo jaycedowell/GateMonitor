@@ -271,9 +271,7 @@ void update_current_state() {
 void handle_history_json() {
   JSONObject body;
   JSONArray history;
-  for(int i=0; i<LastDay.size(); i++) {
-    const Range &aggregate = LastDay[i];
-    
+  for(const Range &aggregate : LastDay) {
     JSONObject entry;
     entry.add("time", aggregate.time);
     entry.add("vbat_min", aggregate.vbat_min);
@@ -318,25 +316,19 @@ void handle_root() {
     body += table;
     
     float vbat_min = 1000, vbat_max = -1000, tbat_min = 1000, tbat_max = -1000;
-    for(int i=0; i<Last10Min.size(); i++) {
-        const Measurement &entry = Last10Min[i];
-        
+    for(const Measurement &entry : Last10Min) {
         vbat_min = fminf(vbat_min, entry.vbat);
         vbat_max = fmaxf(vbat_max, entry.vbat);
         tbat_min = fminf(tbat_min, entry.tbat);
         tbat_max = fmaxf(tbat_max, entry.tbat);
     }
-    for(int i=0; i<LastHour.size(); i++) {
-        const Range &entry = LastHour[i];
-        
+    for(const Range &entry : LastHour) {
         vbat_min = fminf(vbat_min, entry.vbat_min);
         vbat_max = fmaxf(vbat_max, entry.vbat_max);
         tbat_min = fminf(tbat_min, entry.tbat_min);
         tbat_max = fmaxf(tbat_max, entry.tbat_max);
     }
-    for(int i=0; i<LastDay.size(); i++) {
-        const Range &entry = LastDay[i];
-        
+    for(const Range &entry : LastDay) {
         vbat_min = fminf(vbat_min, entry.vbat_min);
         vbat_max = fmaxf(vbat_max, entry.vbat_max);
         tbat_min = fminf(tbat_min, entry.tbat_min);
