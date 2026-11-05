@@ -108,40 +108,25 @@ typedef struct _ComputedState {
   unsigned long time;
 } ComputedState;
 
-typedef struct _MeasurementWindow {
-  int count;
-  float vbat[20];
-  float vsol[20];
-  float tbat[20];
-  unsigned long time[20];
-} MeasurementWindow;
-
-typedef struct _HourlyWindow {
-  int count;
-  float vbat_min[6];
-  float vbat_max[6];
-  float vsol_min[6];
-  float vsol_max[6];
-  float tbat_min[6];
-  float tbat_max[6];
-  unsigned long time[6];
-} HourlyWindow;
-
-typedef struct _DailyWindow {
-  int count;
-  float vbat_min[24];
-  float vbat_max[24];
-  float vsol_min[24];
-  float vsol_max[24];
-  float tbat_min[24];
-  float tbat_max[24];
-  unsigned long time[24];
-} DailyWindow;
-
 ComputedState State = {0};
-MeasurementWindow Last10Min = {0};
-HourlyWindow LastHour = {0};
-DailyWindow LastDay = {0};
+
+typedef struct _Measurement {
+  float vbat;
+  float vsol;
+  float tbat;
+  time_t time;
+} Measurement;
+
+typedef struct _Range {
+  float vbat_min, vbat_max;
+  float vsol_min, vsol_max;
+  float tbat_min, tbat_max;
+  time_t time;
+} Range;
+
+RingBuffer<Measurement,20> Last10Min;
+RingBuffer<Range,6> LastHour;
+RingBuffer<Range,24> LastDay;
 
 void record_measurements() {
   float vbat, vsol, tbat;
@@ -156,66 +141,74 @@ void record_measurements() {
   Serial.print(tbat);
   Serial.println("C");
 
-  int idx = Last10Min.count % 20;
-  Last10Min.vbat[idx] = vbat;
-  Last10Min.vsol[idx] = vsol;
-  Last10Min.tbat[idx] = tbat;
-  Last10Min.time[idx] = time(nullptr);
-  Last10Min.count++;
-  Last10Min.count %= 20;
-  Serial.print("Updated 10 minute history, count is now ");
-  Serial.println(Last10Min.count);
+  Measurement latest;
+  latest.vbat = vbat;
+  latest.vsol = vsol;
+  latest.tbat = tbat;
+  latest.time = time(nullptr);
   
-  if( (Last10Min.count % 20) == 0 ) {
-    idx = LastHour.count;
-    LastHour.vbat_min[idx] = LastHour.vbat_max[idx] = Last10Min.vbat[0];
-    LastHour.vsol_min[idx] = LastHour.vsol_max[idx] = Last10Min.vsol[0];
-    LastHour.tbat_min[idx] = LastHour.tbat_max[idx] = Last10Min.tbat[0];
-    LastHour.time[idx] = Last10Min.time[0];
+  if( Last10Min.push(latest) ) {
+    float vbat_min, vbat_max;
+    float vsol_min, vsol_max;
+    float tbat_min, tbat_max;
+    vbat_min = vbat_max = Last10Min[0].vbat;
+    vsol_min = vsol_max = Last10Min[0].vsol;
+    tbat_min = tbat_max = Last10Min[0].tbat;
     for(int i=1; i<20; i++) {
-      LastHour.vbat_min[idx] = fminf(LastHour.vbat_min[idx], Last10Min.vbat[i]);
-      LastHour.vbat_max[idx] = fmaxf(LastHour.vbat_max[idx], Last10Min.vbat[i]);
-      LastHour.vsol_min[idx] = fminf(LastHour.vsol_min[idx], Last10Min.vsol[i]);
-      LastHour.vsol_max[idx] = fmaxf(LastHour.vsol_max[idx], Last10Min.vsol[i]);
-      LastHour.tbat_min[idx] = fminf(LastHour.tbat_min[idx], Last10Min.tbat[i]);
-      LastHour.tbat_max[idx] = fmaxf(LastHour.tbat_max[idx], Last10Min.tbat[i]);
+      vbat_min = fminf(vbat_min, Last10Min[i].vbat);
+      vbat_max = fmaxf(vbat_max, Last10Min[i].vbat);
+      vsol_min = fminf(vsol_min, Last10Min[i].vsol);
+      vsol_max = fmaxf(vsol_max, Last10Min[i].vsol);
+      tbat_min = fminf(tbat_min, Last10Min[i].tbat);
+      tbat_max = fmaxf(tbat_max, Last10Min[i].tbat);
     }
-    LastHour.count++;
-    LastHour.count %= 6;
-    Serial.print("Updated hour history, count is now ");
-    Serial.println(LastHour.count);
-
-    if( (LastHour.count % 6) == 0 ) {
-      idx = LastDay.count;
-      LastDay.vbat_min[idx] = LastHour.vbat_min[0];
-      LastDay.vbat_max[idx] = LastHour.vbat_max[0];
-      LastDay.vsol_min[idx] = LastHour.vsol_min[0];
-      LastDay.vsol_max[idx] = LastHour.vsol_max[0];
-      LastDay.tbat_min[idx] = LastHour.tbat_min[0];
-      LastDay.tbat_max[idx] = LastHour.tbat_max[0];
-      LastDay.time[idx] = LastHour.time[0];
+    
+    Range aggregate;
+    aggregate.vbat_min = vbat_min;
+    aggregate.vbat_max = vbat_max;
+    aggregate.vsol_min = vsol_min;
+    aggregate.vsol_max = vsol_max;
+    aggregate.tbat_min = tbat_min;
+    aggregate.tbat_max = tbat_max;
+    aggregate.time = Last10Min[0].time;
+    
+    if( LastHour.push(aggregate) ) {
+      vbat_min = LastHour[0].vbat_min;
+      vbat_max = LastHour[0].vbat_max;
+      vsol_min = LastHour[0].vsol_min;
+      vsol_max = LastHour[0].vsol_max;
+      tbat_min = LastHour[0].tbat_min;
+      tbat_max = LastHour[0].tbat_max;
       for(int i=1; i<6; i++) {
-        LastDay.vbat_min[idx] = fminf(LastDay.vbat_min[idx], LastHour.vbat_min[i]);
-        LastDay.vbat_max[idx] = fmaxf(LastDay.vbat_max[idx], LastHour.vbat_max[i]);
-        LastDay.vsol_min[idx] = fminf(LastDay.vsol_min[idx], LastHour.vsol_min[i]);
-        LastDay.vsol_max[idx] = fmaxf(LastDay.vsol_max[idx], LastHour.vsol_max[i]);
-        LastDay.tbat_min[idx] = fminf(LastDay.tbat_min[idx], LastHour.tbat_min[i]);
-        LastDay.tbat_max[idx] = fmaxf(LastDay.tbat_max[idx], LastHour.tbat_max[i]);
+        vbat_min = fminf(vbat_min, LastHour[i].vbat_min);
+        vbat_max = fmaxf(vbat_max, LastHour[i].vbat_max);
+        vsol_min = fminf(vsol_min, LastHour[i].vsol_min);
+        vsol_max = fmaxf(vsol_max, LastHour[i].vsol_max);
+        tbat_min = fminf(tbat_min, LastHour[i].tbat_min);
+        tbat_max = fmaxf(tbat_max, LastHour[i].tbat_max);
       }
-      LastDay.count++;
-      LastDay.count %= 24;
-      Serial.print("Updated day history, count is now ");
-      Serial.println(LastDay.count);
+      
+      aggregate.vbat_min = vbat_min;
+      aggregate.vbat_max = vbat_max;
+      aggregate.vsol_min = vsol_min;
+      aggregate.vsol_max = vsol_max;
+      aggregate.tbat_min = tbat_min;
+      aggregate.tbat_max = tbat_max;
+      aggregate.time = LastHour[0].time;
+      
+      LastDay.push(aggregate);
     }
   }
 }
 
 float get_estimated_soc() {
   float vbat = NAN;
-  if( LastHour.count == 0 ) {
-    vbat = Last10Min.vbat[(Last10Min.count+20-1) % 20];
+  if( LastHour.empty() ) {
+      const Measurement &latest = Last10Min.latest();
+      vbat = latest.vbat;
   } else {
-    vbat = LastHour.vbat_min[(LastHour.count+6-1) % 6];
+      const Range &aggregate = LastHour.latest();
+      vbat = aggregate.vbat_min;
   }
 
   return sla_estimate_soc(vbat);
@@ -224,20 +217,20 @@ float get_estimated_soc() {
 float get_measured_soc() {
   float vbat = NAN;
 
-  int idx0 = (LastDay.count + 24 - 1) % 24;
-  int idx1 = (LastDay.count + 24 - 2) % 24;
-  if( (LastDay.time[idx0] != 0) && (LastDay.time[idx1] != 0) ) {
+  if( LastDay.size() >= 2 ) {
     // If we have two valid hours....
-    float vbat_min = fminf(LastDay.vbat_min[idx0], LastDay.vbat_min[idx1]);
-    float vbat_max = fmaxf(LastDay.vbat_max[idx0], LastDay.vbat_max[idx1]);
+    const Range &aggregate0 = LastDay[LastDay.size() - 1];
+    const Range &aggregate1 = LastDay[LastDay.size() - 2];
+    float vbat_min = fminf(aggregate0.vbat_min, aggregate1.vbat_min);
+    float vbat_max = fmaxf(aggregate0.vbat_max, aggregate1.vbat_max);
 
     if( (vbat_max - vbat_min) < 0.01 ) {
       // If the battery voltage has been flat over those two hours...
-      float vsol_max = fmaxf(LastDay.vsol_max[idx0], LastDay.vsol_max[idx1]);
+      float vsol_max = fmaxf(aggregate0.vsol_max, aggregate1.vsol_max);
 
       if( vsol_max < (vbat_min + 0.3) ) {
         // If we haven't charged the battery in those two hours...
-        vbat = LastDay.vbat_min[idx0];
+        vbat = aggregate0.vbat_min;
       }
     }
   }
@@ -246,14 +239,14 @@ float get_measured_soc() {
 }
 
 void update_current_state() {
-  int idx = (Last10Min.count + 20 - 1) % 20;
-  float vbat = Last10Min.vbat[idx];
-  float vsol = Last10Min.vsol[idx];
-  float tbat = Last10Min.tbat[idx];
+  const Measurement &latest = Last10Min.latest();
+  float vbat = latest.vbat;
+  float vsol = latest.vsol;
+  float tbat = latest.tbat;
   if( tbat != tbat ) {
     tbat = 25.0;
   }
-  State.time = Last10Min.time[idx];
+  State.time = latest.time;
 
   State.in_sun = (vsol > (vbat + 0.3));
   State.full_threshold = sla_estimate_full_volts(tbat);
@@ -276,125 +269,108 @@ void update_current_state() {
 }
 
 void handle_history_json() {
-    String body = String("{\n");
-    body += " \"updated\": " +  String(State.time) + ",\n";
-    body += " \"history\": [\n";
-    for(int i=0; i<24; i++) {
-        int idx = (LastDay.count - 24 + i) % 24;
-        if( LastDay.time[idx] == 0 ) {
-          continue;
-        }
-        body += "  {\n";
-        body += "   \"time\": " + String(LastDay.time[idx]) + ",\n";
-        body += "   \"vbat_min\": " + String(LastDay.vbat_min[idx]) + ",\n";
-        body += "   \"vbat_max\": " + String(LastDay.vbat_max[idx]) + ",\n";
-        body += "   \"vsol_min\": " + String(LastDay.vsol_min[idx]) + ",\n";
-        body += "   \"vsol_max\": " + String(LastDay.vsol_max[idx]) + ",\n";
-        body += "   \"temp_bat_min\": " + String(LastDay.tbat_min[idx]) + ",\n";
-        body += "   \"temp_bat_max\": " + String(LastDay.tbat_max[idx]) + ",\n";
-        body += "   \"vbat_full\": " + String(sla_estimate_full_volts(LastDay.tbat_max[idx])) + ",\n";
-        body += "   \"vbat_over\": " + String(sla_estimate_over_volts(LastDay.tbat_max[idx])) + ",\n";
-        body += "  }";
-        if( i != 23 ) {
-            body += ",\n";
-        } else {
-            body += "\n";
-        }
+  JSONObject body;
+  JSONArray history;
+  for(int i=0; i<LastDay.size(); i++) {
+    const Range &aggregate = LastDay[i];
+    
+    JSONObject entry;
+    entry.add("time", aggregate.time);
+    entry.add("vbat_min", aggregate.vbat_min);
+    entry.add("vbat_max", aggregate.vbat_max);
+    entry.add("vsol_min", aggregate.vsol_min);
+    entry.add("vsol_max", aggregate.vsol_max);
+    entry.add("temp_bat_min", aggregate.tbat_min);
+    entry.add("temp_bat_max", aggregate.tbat_max);
+    entry.add("vbat_full", sla_estimate_full_volts(aggregate.tbat_max));
+    entry.add("vbat_over", sla_estimate_over_volts(aggregate.tbat_max));
+    history.add(entry);
   }
-  body += "  ]\n";
-  body += "}\n";
-  
-  sh.server.send(200, "application/json", body);
+  body.add("history", history);
+  body.add("updated", format_epoch(State.time, "%Y/%m/%d %H:%M:%S"));
+    
+  sh.server.send(200, "application/json", body.render());
+}
+
+const char* decode_gate_state(uint8_t state) {
+    switch(gate_state) {
+        case 3: // fall through
+        case 2: return "hold open";
+        case 1: return "cycle open";
+        case 0: return "cycle close";
+        default: return "unknown";
+    }
 }
 
 void handle_root() {
+    const Measurement &latest = Last10Min.latest();
+    
     String body = String(PAGE_HEAD);
     body.replace("%TITLE%", sh.name());
-    
-    int idx = (Last10Min.count + 20 - 1) % 20;
-    body += "Battery Voltage: " + String(Last10Min.vbat[idx]) + " V<br>\n";
-    body += "Battery Temperature: " + String(temp_c_to_f(Last10Min.tbat[idx])) + " F<br>\n";
-    body += "Solar Voltage: " + String(Last10Min.vsol[idx]) + " V<br>\n";
-    body += "Battery is charging? " + String(State.is_charging ? "yes" : "no") + "<br>\n";
-    body += "Battery SoC: " + String(State.soc) + "%" + String(State.soc_measured ? "" : " (estimated)") + "<br>\n";
-    body += "<br>\n";
+    TwoColumnTable table;
+    table.add_row("Battery Voltage", latest.vbat, "V");
+    table.add_row("Battery Temperature", temp_c_to_f(latest.tbat), "F");
+    table.add_row("Solar Voltage", latest.vsol, "V"); 
+    table.add_row("Battery is charging? ", State.is_charging);
+    table.add_row("Battery SoC", State.soc, "%" + String(State.soc_measured ? "" : " (estimated)"));
+    table.add_row("Gate", decode_gate_state(gate_state));
+    table.add_row("Updated", format_now("%Y/%m/%d %H:%M:%S"));
+    body += table;
     
     float vbat_min = 1000, vbat_max = -1000, tbat_min = 1000, tbat_max = -1000;
-    for(int i=0; i<20; i++) {
-        // 30 s chunks within the last 10 minutes
-        if( Last10Min.time[i] == 0 ) {
-            continue;
-        }
-        vbat_min = fminf(vbat_min, Last10Min.vbat[i]);
-        vbat_max = fmaxf(vbat_max, Last10Min.vbat[i]);
+    for(int i=0; i<Last10Min.size(); i++) {
+        const Measurement &entry = Last10Min[i];
+        
+        vbat_min = fminf(vbat_min, entry.vbat);
+        vbat_max = fmaxf(vbat_max, entry.vbat);
+        tbat_min = fminf(tbat_min, entry.tbat);
+        tbat_max = fmaxf(tbat_max, entry.tbat);
     }
-    for(int i=0; i<6; i++) {
-        // 10 min chunks within the last hour
-        if( LastHour.time[i] == 0 ) {
-            continue;
-        }
-        vbat_min = fminf(vbat_min, LastHour.vbat_min[i]);
-        vbat_max = fmaxf(vbat_max, LastHour.vbat_max[i]);
-        tbat_min = fminf(tbat_min, LastHour.tbat_min[i]);
-        tbat_max = fmaxf(tbat_max, LastHour.tbat_max[i]);
+    for(int i=0; i<LastHour.size(); i++) {
+        const Range &entry = LastHour[i];
+        
+        vbat_min = fminf(vbat_min, entry.vbat_min);
+        vbat_max = fmaxf(vbat_max, entry.vbat_max);
+        tbat_min = fminf(tbat_min, entry.tbat_min);
+        tbat_max = fmaxf(tbat_max, entry.tbat_max);
     }
-    for(int i=0; i<24; i++) {
-        // 1 hr chunks within the last day
-        if( LastDay.time[i] == 0 ) {
-            continue;
-        }
-        vbat_min = fminf(vbat_min, LastDay.vbat_min[i]);
-        vbat_max = fmaxf(vbat_max, LastDay.vbat_max[i]);
-        tbat_min = fminf(tbat_min, LastDay.tbat_min[i]);
-        tbat_max = fmaxf(tbat_max, LastDay.tbat_max[i]);
+    for(int i=0; i<LastDay.size(); i++) {
+        const Range &entry = LastDay[i];
+        
+        vbat_min = fminf(vbat_min, entry.vbat_min);
+        vbat_max = fmaxf(vbat_max, entry.vbat_max);
+        tbat_min = fminf(tbat_min, entry.tbat_min);
+        tbat_max = fmaxf(tbat_max, entry.tbat_max);
     }
     if( vbat_max >= 0 ) {
-        body += "24 hr Ranges:<br>\n";
-        body += "  Battery Voltage: " + String(vbat_min) + " to " + String(vbat_max) + " V<br>\n";
-        body += "  Battery Temperature: " + String(temp_c_to_f(tbat_min)) + " to " + String(temp_c_to_f(tbat_max)) + " F<br>\n";
-        body += "<br>\n";
+        TwoColumnTable ranges;
+        ranges.add_header("24 hr Ranges");
+        ranges.add_row("Battery Voltage", String(vbat_min) + " to " + String(vbat_max) + " V");
+        if( tbat_max > -100 ) {
+            ranges.add_row("Battery Temperature", String(temp_c_to_f(tbat_min)) + " to " + String(temp_c_to_f(tbat_max)) + " F");
+        }
+        body += "<br><br>\n";
+        body += ranges;
     }
-    body += "<br>\n";
-    
-    body += "Gate: ";
-    switch(gate_state) {
-        case 3: // fall through
-        case 2: body += "hold open"; break;
-        case 1: body += "cycle open"; break;
-        case 0: body += "cycle close"; break;
-        default: body += "unknown";
-    }
-    body += "<br>\n";
-    
-    body += "Updated: " + format_now("%Y/%m/%d %H:%M:%S") + "<br>\n";
     body += String(PAGE_FOOT);
     
     sh.server.send(200, "text/html", body);
 }
 
 void handle_root_json() {
-    int idx = (Last10Min.count + 20 - 1) % 20;
+    const Measurement &latest = Last10Min.latest();
     
-    String body = String("{\n");
-    body += " \"vbat\": " + String(Last10Min.vbat[idx]) + ",\n";
-    body += " \"temp_bat\": " + String(Last10Min.tbat[idx]) + ",\n";
-    body += " \"vsolar\": " + String(Last10Min.vsol[idx]) + ",\n";
-    body += " \"battery_charging\": " + String(State.is_charging ? "true" : "false") + ",\n";
-    body += " \"battery_soc\": " + String(State.soc) + ",\n";
-    body += " \"battery_soc_type\": \"" + String(State.soc_measured ? "measured" : " (estimated)") + "\",\n";
-    body += " \"gate\": \"";
-    switch(gate_state) {
-        case 3: // fall through
-        case 2: body += "hold open"; break;
-        case 1: body += "cycle open"; break;
-        case 0: body += "cycle close"; break;
-        default: body += "unknown";
-    }
-    body += "\",\n";
-    body += " \"updated\": \"" + format_now("%Y/%m/%d %H:%M:%S") + "\"\n";
-    body += "}\n";
+    JSONObject body;
+    body.add("vbat", latest.vbat);
+    body.add("temp_bat", latest.tbat);
+    body.add("vsolar", latest.vsol);
+    body.add("battery_charging", State.is_charging);
+    body.add("battery_soc", State.soc);
+    body.add("battery_soc_type", (State.soc_measured ? "measured" : "estimated"));
+    body.add("gate", decode_gate_state(gate_state));
+    body.add("updated", format_now("%Y/%m/%d %H:%M:%S"));
     
-    sh.server.send(200, "application/json", body);
+    sh.server.send(200, "application/json", body.render());
 }
 
 void handle_open() {
@@ -429,7 +405,7 @@ void handle_hold() {
         // GET (or anything else): show the confirmation button
         String body = String(PAGE_HEAD);
         body += "<form method=\"post\" action=\"/hold\">\n";
-        body += " <button type=\"submit\">Restart %TITLE%</button>\n";
+        body += " <button type=\"submit\">Toggel Gate Hold State</button>\n";
         body += "</form>\n";
         body += String(PAGE_FOOT);
         body.replace("%TITLE%", sh.name());
@@ -498,7 +474,7 @@ void process_led_state() {
         }
     } else {
         digitalWrite(PIN_LED_GREEN, LOW);
-        led_state != 1;
+        led_state |= 1;
     }
     
     if( State.soc < 30 ) {
