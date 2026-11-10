@@ -300,8 +300,6 @@ const char* decode_gate_state(uint8_t state) {
 void handle_root() {
     const Measurement &latest = Last10Min.latest();
     
-    String body = String(PAGE_HEAD);
-    body.replace("%TITLE%", sh.name());
     TwoColumnTable table;
     table.add_row("Battery Voltage", latest.vbat, "V");
     table.add_row("Battery Temperature", temp_c_to_f(latest.tbat), "F");
@@ -310,7 +308,9 @@ void handle_root() {
     table.add_row("Battery SoC", State.soc, "%" + String(State.soc_measured ? "" : " (estimated)"));
     table.add_row("Gate", decode_gate_state(gate_state));
     table.add_row("Updated", format_now("%Y/%m/%d %H:%M:%S"));
-    body += table;
+    
+    HTMLPage page = sh.get_base_html_page()
+    page.add_content(table);
     
     float vbat_min, vbat_max;
     float tbat_min, tbat_max;
@@ -341,12 +341,11 @@ void handle_root() {
         if( tbat_max == tbat_max ) {
             ranges.add_row("Battery Temperature", String(temp_c_to_f(tbat_min)) + " to " + String(temp_c_to_f(tbat_max)) + " F");
         }
-        body += "<br><br>\n";
-        body += ranges;
+        page.add_content("<br><br>\n");
+        page.add_content(ranges);
     }
-    body += String(PAGE_FOOT);
     
-    sh.server.send(200, "text/html", body);
+    sh.server.send(200, "text/html", page.render());
 }
 
 void handle_root_json() {
@@ -368,14 +367,15 @@ void handle_root_json() {
 void handle_open() {
     if( sh.server.method() != HTTP_POST ) {
         // GET (or anything else): show the confirmation button
-        String body = String(PAGE_HEAD);
-        body += "<form method=\"post\" action=\"/open\">\n";
-        body += " <button type=\"submit\">Open Gate</button>\n";
-        body += "</form>\n";
-        body += String(PAGE_FOOT);
-        body.replace("%TITLE%", sh.name());
+        String contents = String();
+        contents += "<form method=\"post\" action=\"/open\">\n";
+        contents += " <button type=\"submit\">Open Gate</button>\n";
+        contents += "</form>\n";
         
-        sh.server.send(200, "text/html", body);
+        HTMLPage page = sh.get_base_html_page();
+        page.add_content(contents);
+        
+        sh.server.send(200, "text/html", page.render());
     } else {
         if( !sh.server.authenticate(auth_username, auth_password)) {
             return sh.server.requestAuthentication(BASIC_AUTH, sh.name());
@@ -383,26 +383,28 @@ void handle_open() {
         
         gate_state = (gate_state > 1 ? gate_state : 1);
         
-        String body = String(PAGE_HEAD);
-        body.replace("%TITLE%", sh.name());
-        body += "Gate: cycle open<br>\n";
-        body += String(PAGE_FOOT);
+        String contents = String();
+        contents += "Gate: cycle open<br>\n";
         
-        sh.server.send(200, "text/html", body);
+        HTMLPage page = sh.get_base_html_page();
+        page.add_content(contents);
+        
+        sh.server.send(200, "text/html", page.render());
     }
 }
 
 void handle_hold() {
     if( sh.server.method() != HTTP_POST ) {
         // GET (or anything else): show the confirmation button
-        String body = String(PAGE_HEAD);
-        body += "<form method=\"post\" action=\"/hold\">\n";
-        body += " <button type=\"submit\">Toggel Gate Hold State</button>\n";
-        body += "</form>\n";
-        body += String(PAGE_FOOT);
-        body.replace("%TITLE%", sh.name());
+        String contents = String();
+        contents += "<form method=\"post\" action=\"/hold\">\n";
+        contents += " <button type=\"submit\">Toggel Gate Hold State</button>\n";
+        contents += "</form>\n";
         
-        sh.server.send(200, "text/html", body);
+        HTMLPage page = sh.get_base_html_page();
+        page.add_content(contents);
+        
+        sh.server.send(200, "text/html", page.render());
     } else {
         if( !sh.server.authenticate(auth_username, auth_password)) {
             return sh.server.requestAuthentication(BASIC_AUTH, sh.name());
@@ -410,10 +412,11 @@ void handle_hold() {
         
         gate_state = (gate_state != 3 ? 3 : 0);
         
-        String body = String(PAGE_HEAD);
-        body.replace("%TITLE%", sh.name());
-        body += "Gate: " + String(gate_state > 0 ? "hold open" : "cycle close") + "<br>\n";
-        body += String(PAGE_FOOT);
+        String contents = String();
+        contents += "Gate: " + String(gate_state > 0 ? "hold open" : "cycle close") + "<br>\n";
+        
+        HTMLPage page = sh.get_base_html_page();
+        page.add_content(contents);
         
         sh.server.send(200, "text/html", body);
     }
@@ -524,6 +527,10 @@ void setup() {
   sh.server.on("/history.json", handle_history_json);
   sh.server.on("/open", handle_open);
   sh.server.on("/hold", handle_hold);
+  
+  sh.register_navigation_link("/", "Home");
+  sh.register_navigation_link("/open", "Open");
+  sh.register_navigation_link("/hold", "Hold");
   
   sh.every(30000, process_measurements);
   sh.every(1000, process_gate_state);
