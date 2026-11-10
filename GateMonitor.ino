@@ -309,7 +309,7 @@ void handle_root() {
     table.add_row("Gate", decode_gate_state(gate_state));
     table.add_row("Updated", format_now("%Y/%m/%d %H:%M:%S"));
     
-    HTMLPage page = sh.get_base_html_page()
+    HTMLPage page = sh.get_base_html_page();
     page.add_content(table);
     
     float vbat_min, vbat_max;
@@ -418,7 +418,7 @@ void handle_hold() {
         HTMLPage page = sh.get_base_html_page();
         page.add_content(contents);
         
-        sh.server.send(200, "text/html", body);
+        sh.server.send(200, "text/html", page.render());
     }
 }
 
