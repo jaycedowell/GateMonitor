@@ -531,6 +531,7 @@ void setup() {
   sh.register_navigation_link("/", "Home");
   sh.register_navigation_link("/open", "Open");
   sh.register_navigation_link("/hold", "Hold");
+  sh.register_navigation_link("/status", "Status");
   
   sh.every(30000, process_measurements);
   sh.every(1000, process_gate_state);
