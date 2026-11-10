@@ -10,4 +10,4 @@ Parts List
  * Adafruit 10K Precision Epoxy Thermistor
  * Mighty Mule GTO/1000 gate opener - circa 2000
 
-<a href="https://www.flaticon.com/free-icons/gate" title="gate icons">Gate icons created by xnimrodx - Flaticon</a>
+<a href="https://www.flaticon.com/free-icons/parking-barrier" title="parking barrier icons">Parking barrier icons created by Magnific - Flaticon</a>
