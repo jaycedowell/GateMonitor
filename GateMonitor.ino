@@ -312,7 +312,10 @@ void handle_root() {
     table.add_row("Updated", format_now("%Y/%m/%d %H:%M:%S"));
     body += table;
     
-    float vbat_min = 1000, vbat_max = -1000, tbat_min = 1000, tbat_max = -1000;
+    float vbat_min, vbat_max;
+    float tbat_min, tbat_max;
+    vbat_min = vbat_max = NAN;
+    tbat_min = tbat_max = NAN;
     for(const Measurement &entry : Last10Min) {
         vbat_min = fminf(vbat_min, entry.vbat);
         vbat_max = fmaxf(vbat_max, entry.vbat);
@@ -331,11 +334,11 @@ void handle_root() {
         tbat_min = fminf(tbat_min, entry.tbat_min);
         tbat_max = fmaxf(tbat_max, entry.tbat_max);
     }
-    if( vbat_max >= 0 ) {
+    if( vbat_max == vbat_max ) {
         TwoColumnTable ranges;
         ranges.add_header("24 hr Ranges");
         ranges.add_row("Battery Voltage", String(vbat_min) + " to " + String(vbat_max) + " V");
-        if( tbat_max > -100 ) {
+        if( tbat_max == tbat_max ) {
             ranges.add_row("Battery Temperature", String(temp_c_to_f(tbat_min)) + " to " + String(temp_c_to_f(tbat_max)) + " F");
         }
         body += "<br><br>\n";
@@ -506,6 +509,9 @@ void setup() {
   ads1115.begin(0x48);
   ads1115.setGain(GAIN_ONE); 
   delay(10);
+  
+  // Preload the state
+  process_measurements();
   
   // Setup Simple Home
   sh.set_wifi(ssid, pass);
