@@ -1,3 +1,6 @@
 # Authentication details
 Auth_private.h
 WiFi_private.h
+
+# Save history
+history.json*
