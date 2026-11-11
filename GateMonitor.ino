@@ -364,9 +364,27 @@ void handle_root_json() {
     sh.server.send(200, "application/json", body.render());
 }
 
+uint32_t action_token = 0;
+uint64_t action_token_issued = 0;
+
+void generate_action_token() {
+  action_token = esp_random();
+  action_token_issued = now_millis();
+}
+
+bool validate_action_token(const String &provided_token) {
+  bool is_valid = (action_token != 0) \
+                  && ((now_millis() - action_token_issued) < 60000) \
+                  && (provided_token == String(action_token));
+  action_token = 0;
+  return is_valid;
+}
+
 void handle_open() {
     if( sh.server.method() != HTTP_POST ) {
         // GET (or anything else): show the confirmation button
+        generate_action_token();
+        
         String contents = String();
         contents += "<form method=\"post\" action=\"/open\">\n";
         contents += " <button type=\"submit\">Open Gate</button>\n";
@@ -381,10 +399,14 @@ void handle_open() {
             return sh.server.requestAuthentication(BASIC_AUTH, sh.name());
         }
         
-        gate_state = (gate_state > 1 ? gate_state : 1);
-        
         String contents = String();
-        contents += "Gate: cycle open<br>\n";
+        if( validate_action_token(sh.server.arg("token")) ) {
+            gate_state = (gate_state > 1 ? gate_state : 1);
+        
+            contents += "Gate: cycle open<br>\n";
+        } else {
+            contents += "Action validation failed.  Please refresh and try again.<br>\n";
+        }
         
         HTMLPage page = sh.get_base_html_page();
         page.add_content(contents);
@@ -396,6 +418,8 @@ void handle_open() {
 void handle_hold() {
     if( sh.server.method() != HTTP_POST ) {
         // GET (or anything else): show the confirmation button
+        generate_action_token();
+        
         String contents = String();
         contents += "<form method=\"post\" action=\"/hold\">\n";
         contents += " <button type=\"submit\">Toggel Gate Hold State</button>\n";
@@ -410,10 +434,14 @@ void handle_hold() {
             return sh.server.requestAuthentication(BASIC_AUTH, sh.name());
         }
         
-        gate_state = (gate_state != 3 ? 3 : 0);
-        
         String contents = String();
-        contents += "Gate: " + String(gate_state > 0 ? "hold open" : "cycle close") + "<br>\n";
+        if( validate_action_token(sh.server.arg("token")) ) {
+            gate_state = (gate_state != 3 ? 3 : 0);
+        
+            contents += "Gate: " + String(gate_state > 0 ? "hold open" : "cycle close") + "<br>\n";
+        } else {
+            contents += "Action validation failed.  Please refresh and try again.<br>\n";
+        }
         
         HTMLPage page = sh.get_base_html_page();
         page.add_content(contents);
